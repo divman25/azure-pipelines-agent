@@ -458,9 +458,11 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
                         return;
                     }
 
+                    var systemConnection = message.Resources.Endpoints.Single(x => string.Equals(x.Name, WellKnownServiceEndpointNames.SystemVssConnection, StringComparison.OrdinalIgnoreCase));
                     // we get first jobrequest renew succeed and start the worker process with the job message.
                     // send notification to machine provisioner.
                     await notification.JobStarted(message.JobId);
+                    notification.StartMonitor(message.JobId, systemConnection.Authorization.Parameters["AccessToken"], systemConnection.Url);
                     HostContext.WritePerfCounter($"SentJobToWorker_{requestId.ToString()}");
 
                     try
@@ -590,6 +592,8 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
                     }
                     finally
                     {
+                        await notification.EndMonitor();
+                        
                         // This should be the last thing to run so we don't notify external parties until actually finished
                         await notification.JobCompleted(message.JobId);
                     }
