@@ -14,8 +14,8 @@ namespace Microsoft.VisualStudio.Services.Agent
     {
         Task JobStarted(Guid jobId);
         Task JobCompleted(Guid jobId);
-        void StartClient(string pipeName, int monitorPort, CancellationToken cancellationToken);
-        void StartClient(string socketAddress, int monitorPort);
+        void StartClient(string pipeName, string monitorPort, CancellationToken cancellationToken);
+        void StartClient(string socketAddress, string monitorPort);
         void StartMonitor(Guid jobId, string accessToken, Uri serverUrl);
         Task EndMonitor();
     }
@@ -90,7 +90,7 @@ namespace Microsoft.VisualStudio.Services.Agent
             }
         }
 
-        public async void StartClient(string pipeName, int monitorPort, CancellationToken cancellationToken)
+        public async void StartClient(string pipeName, string monitorPort, CancellationToken cancellationToken)
         {
             if (pipeName != null && !_configured)
             {
@@ -105,7 +105,7 @@ namespace Microsoft.VisualStudio.Services.Agent
             ConnectMonitor(monitorPort);
         }
 
-        public void StartClient(string socketAddress, int monitorPort)
+        public void StartClient(string socketAddress, string monitorPort)
         {
             if (!_configured)
             {
@@ -171,11 +171,6 @@ namespace Microsoft.VisualStudio.Services.Agent
                     Trace.Error($"Failed sending StartMonitor message on socket!");
                     Trace.Error(e);
                 }
-                catch (Exception e)
-                {
-                    Trace.Error($"Failed sending StartMonitor message on socket!");
-                    Trace.Error(e);
-                }
             }
         }
 
@@ -191,14 +186,9 @@ namespace Microsoft.VisualStudio.Services.Agent
                     _monitorSocket.Send(Encoding.UTF8.GetBytes(message));
                     Trace.Info("Finished EndMonitor writing to socket");
 
-                    await Task.Delay(TimeSpan.FromSeconds(10));
+                    await Task.Delay(TimeSpan.FromSeconds(5));
                 }
                 catch (SocketException e)
-                {
-                    Trace.Error($"Failed sending message \"{message}\" on socket!");
-                    Trace.Error(e);
-                }
-                catch (Exception e)
                 {
                     Trace.Error($"Failed sending message \"{message}\" on socket!");
                     Trace.Error(e);
@@ -206,28 +196,30 @@ namespace Microsoft.VisualStudio.Services.Agent
             }
         }
 
-        private void ConnectMonitor(int monitorPort)
+        private void ConnectMonitor(string port)
         {
-            if(!_isMonitorConfigured && monitorPort > 0)
-            {
-                try
+            int monitorPort = 0;
+            if (!String.IsNullOrEmpty(port) && Int32.TryParse(port, out monitorPort))
+            {    
+                Trace.Verbose("Trying to connect to monitor at port {0}", monitorPort);
+
+                if(!_isMonitorConfigured && monitorPort > 0)
                 {
-                    _monitorSocket = new Socket(SocketType.Stream, ProtocolType.Tcp);
-                    _monitorSocket.Connect(IPAddress.Parse("127.0.0.1"), monitorPort);
-                    Trace.Info("Connection successful to local port {0}", monitorPort);
-                    _isMonitorConfigured = true;
-                }
-                catch (SocketException e)
-                {
-                    Trace.Error("Connection to monitor port {0} failed!", monitorPort);
-                    Trace.Error(e);
-                }
-                catch (Exception e)
-                {
-                    Trace.Error("Connection to monitor port {0} failed!", monitorPort);
-                    Trace.Error(e);
+                    try
+                    {
+                        _monitorSocket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+                        _monitorSocket.Connect(IPAddress.Parse("127.0.0.1"), monitorPort);
+                        Trace.Info("Connection successful to local port {0}", monitorPort);
+                        _isMonitorConfigured = true;
+                    }
+                    catch (Exception e)
+                    {
+                        Trace.Error("Connection to monitor port {0} failed!", monitorPort);
+                        Trace.Error(e);
+                    }
                 }
             }
+            
         }
 
         public void Dispose()

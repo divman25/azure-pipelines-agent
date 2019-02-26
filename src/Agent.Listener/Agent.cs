@@ -281,21 +281,15 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
                 CancellationTokenSource messageQueueLoopTokenSource = CancellationTokenSource.CreateLinkedTokenSource(HostContext.AgentShutdownToken);
                 try
                 {
-                    int monitorPort = 0;
                     var notification = HostContext.GetService<IJobNotification>();
-
-                    if (!String.IsNullOrEmpty(settings.MonitorPort) && Int32.TryParse(settings.MonitorPort, out monitorPort))
-                    {
-                        Trace.Verbose("Monitoring is enabled at port {0}", monitorPort);
-                    }
 
                     if (!String.IsNullOrEmpty(settings.NotificationSocketAddress))
                     {
-                        notification.StartClient(settings.NotificationSocketAddress, monitorPort);
+                        notification.StartClient(settings.NotificationSocketAddress, settings.MonitorPort);
                     }
                     else
                     {
-                        notification.StartClient(settings.NotificationPipeName, monitorPort, HostContext.AgentShutdownToken);
+                        notification.StartClient(settings.NotificationPipeName, settings.MonitorPort, HostContext.AgentShutdownToken);
                     }
                     // this is not a reliable way to disable auto update.
                     // we need server side work to really enable the feature
