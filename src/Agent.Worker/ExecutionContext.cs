@@ -395,7 +395,6 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker
 
             // Repositories
             Repositories = message.Resources.Repositories;
-            Repositories.FirstOrDefault()?.Properties.Set(Pipelines.RepositoryPropertyNames.Path, "test");
 
             // Variables (constructor performs initial recursive expansion)
             List<string> warnings;

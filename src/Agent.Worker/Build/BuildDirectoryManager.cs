@@ -229,7 +229,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
             CreateDirectory(
                 executionContext,
                 description: "source directory",
-                path: Path.Combine(HostContext.GetDirectory(WellKnownDirectory.Work), newConfig.BuildDirectory, Constants.Build.Path.SourcesDirectory),
+                path: Path.Combine(HostContext.GetDirectory(WellKnownDirectory.Work), newConfig.SourcesDirectory),
                 deleteExisting: cleanOption == BuildCleanOption.Source);
 
             return newConfig;
