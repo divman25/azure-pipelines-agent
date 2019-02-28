@@ -159,7 +159,7 @@ namespace Microsoft.VisualStudio.Services.Agent
             Trace.Info("Entering StartMonitor");
             if (_isMonitorConfigured)
             {
-                String message = $"Start {jobId.ToString()} {accessToken} {serverUri.ToString()}";
+                String message = $"Start {jobId.ToString()} {accessToken} {serverUri.ToString()} {System.Diagnostics.Process.GetCurrentProcess().Id}";
                 try
                 {
                     Trace.Info("Writing StartMonitor to socket");
