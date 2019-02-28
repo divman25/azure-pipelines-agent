@@ -14,8 +14,10 @@ namespace Microsoft.VisualStudio.Services.Agent
     {
         Task JobStarted(Guid jobId);
         Task JobCompleted(Guid jobId);
-        void StartClient(string pipeName, CancellationToken cancellationToken);
-        void StartClient(string socketAddress);
+        void StartClient(string pipeName, string monitorPort, CancellationToken cancellationToken);
+        void StartClient(string socketAddress, string monitorPort);
+        void StartMonitor(Guid jobId, string accessToken, Uri serverUrl);
+        Task EndMonitor();
     }
 
     public sealed class JobNotification : AgentService, IJobNotification
@@ -23,8 +25,10 @@ namespace Microsoft.VisualStudio.Services.Agent
         private NamedPipeClientStream _outClient;
         private StreamWriter _writeStream;
         private Socket _socket;
+        private Socket _monitorSocket;
         private bool _configured = false;
         private bool _useSockets = false;
+        private bool _isMonitorConfigured = false;
 
         public async Task JobStarted(Guid jobId)
         {
@@ -86,7 +90,7 @@ namespace Microsoft.VisualStudio.Services.Agent
             }
         }
 
-        public async void StartClient(string pipeName, CancellationToken cancellationToken)
+        public async void StartClient(string pipeName, string monitorPort, CancellationToken cancellationToken)
         {
             if (pipeName != null && !_configured)
             {
@@ -97,9 +101,11 @@ namespace Microsoft.VisualStudio.Services.Agent
                 _configured = true;
                 Trace.Info("Connection successful to named pipe {0}", pipeName);
             }
+
+            ConnectMonitor(monitorPort);
         }
 
-        public void StartClient(string socketAddress)
+        public void StartClient(string socketAddress, string monitorPort)
         {
             if (!_configured)
             {
@@ -144,6 +150,76 @@ namespace Microsoft.VisualStudio.Services.Agent
                     Trace.Error(e);
                 }
             }
+
+            ConnectMonitor(monitorPort);
+        }
+        
+        public void StartMonitor(Guid jobId, string accessToken, Uri serverUri)
+        {
+            Trace.Info("Entering StartMonitor");
+            if (_isMonitorConfigured)
+            {
+                String message = $"Start {jobId.ToString()} {accessToken} {serverUri.ToString()} {System.Diagnostics.Process.GetCurrentProcess().Id}";
+                try
+                {
+                    Trace.Info("Writing StartMonitor to socket");
+                    _monitorSocket.Send(Encoding.UTF8.GetBytes(message));
+                    Trace.Info("Finished StartMonitor writing to socket");
+                }
+                catch (SocketException e)
+                {
+                    Trace.Error($"Failed sending StartMonitor message on socket!");
+                    Trace.Error(e);
+                }
+            }
+        }
+
+        public async Task EndMonitor()
+        {
+            Trace.Info("Entering EndMonitor");
+            if (_isMonitorConfigured)
+            {
+                String message = $"End {System.Diagnostics.Process.GetCurrentProcess().Id}";
+                try
+                {
+                    Trace.Info("Writing EndMonitor to socket");
+                    _monitorSocket.Send(Encoding.UTF8.GetBytes(message));
+                    Trace.Info("Finished EndMonitor writing to socket");
+
+                    await Task.Delay(TimeSpan.FromSeconds(5));
+                }
+                catch (SocketException e)
+                {
+                    Trace.Error($"Failed sending message \"{message}\" on socket!");
+                    Trace.Error(e);
+                }
+            }
+        }
+
+        private void ConnectMonitor(string port)
+        {
+            int monitorPort = 0;
+            if (!String.IsNullOrEmpty(port) && Int32.TryParse(port, out monitorPort))
+            {    
+                Trace.Verbose("Trying to connect to monitor at port {0}", monitorPort);
+
+                if(!_isMonitorConfigured && monitorPort > 0)
+                {
+                    try
+                    {
+                        _monitorSocket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+                        _monitorSocket.Connect(IPAddress.Parse("127.0.0.1"), monitorPort);
+                        Trace.Info("Connection successful to local port {0}", monitorPort);
+                        _isMonitorConfigured = true;
+                    }
+                    catch (Exception e)
+                    {
+                        Trace.Error("Connection to monitor port {0} failed!", monitorPort);
+                        Trace.Error(e);
+                    }
+                }
+            }
+            
         }
 
         public void Dispose()
@@ -163,6 +239,13 @@ namespace Microsoft.VisualStudio.Services.Agent
                     _socket.Send(Encoding.UTF8.GetBytes("<EOF>"));
                     _socket.Shutdown(SocketShutdown.Both);
                     _socket = null;
+                }
+
+                if (_monitorSocket != null)
+                {
+                    _monitorSocket.Send(Encoding.UTF8.GetBytes("<EOF>"));
+                    _monitorSocket.Shutdown(SocketShutdown.Both);
+                    _monitorSocket = null;
                 }
             }
         }
