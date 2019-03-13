@@ -12,12 +12,10 @@ namespace Microsoft.VisualStudio.Services.Agent
     [ServiceLocator(Default = typeof(JobNotification))]
     public interface IJobNotification : IAgentService, IDisposable
     {
-        Task JobStarted(Guid jobId);
+        Task JobStarted(Guid jobId, string accessToken, Uri serverUrl);
         Task JobCompleted(Guid jobId);
         void StartClient(string pipeName, string monitorPort, CancellationToken cancellationToken);
         void StartClient(string socketAddress, string monitorPort);
-        void StartMonitor(Guid jobId, string accessToken, Uri serverUrl);
-        Task EndMonitor();
     }
 
     public sealed class JobNotification : AgentService, IJobNotification
@@ -30,9 +28,12 @@ namespace Microsoft.VisualStudio.Services.Agent
         private bool _useSockets = false;
         private bool _isMonitorConfigured = false;
 
-        public async Task JobStarted(Guid jobId)
+        public async Task JobStarted(Guid jobId, string accessToken, Uri serverUrl)
         {
             Trace.Info("Entering JobStarted Notification");
+
+            StartMonitor(jobId, accessToken, serverUrl);
+
             if (_configured)
             {
                 String message = $"Starting job: {jobId.ToString()}";
@@ -63,6 +64,9 @@ namespace Microsoft.VisualStudio.Services.Agent
         public async Task JobCompleted(Guid jobId)
         {
             Trace.Info("Entering JobCompleted Notification");
+
+            await EndMonitor();
+            
             if (_configured)
             {
                 String message = $"Finished job: {jobId.ToString()}";
@@ -154,45 +158,56 @@ namespace Microsoft.VisualStudio.Services.Agent
             ConnectMonitor(monitorPort);
         }
         
-        public void StartMonitor(Guid jobId, string accessToken, Uri serverUri)
+        private void StartMonitor(Guid jobId, string accessToken, Uri serverUri)
         {
-            Trace.Info("Entering StartMonitor");
-            if (_isMonitorConfigured)
+            try
             {
-                String message = $"Start {jobId.ToString()} {accessToken} {serverUri.ToString()} {System.Diagnostics.Process.GetCurrentProcess().Id}";
-                try
+                Trace.Info("Entering StartMonitor");
+                if (_isMonitorConfigured)
                 {
+                    String message = $"Start {jobId.ToString()} {accessToken} {serverUri.ToString()} {System.Diagnostics.Process.GetCurrentProcess().Id}";
+
                     Trace.Info("Writing StartMonitor to socket");
                     _monitorSocket.Send(Encoding.UTF8.GetBytes(message));
                     Trace.Info("Finished StartMonitor writing to socket");
                 }
-                catch (SocketException e)
-                {
-                    Trace.Error($"Failed sending StartMonitor message on socket!");
-                    Trace.Error(e);
-                }
+            }
+            catch (SocketException e)
+            {
+                Trace.Error($"Failed sending StartMonitor message on socket!");
+                Trace.Error(e);
+            }
+            catch (Exception e)
+            {
+                Trace.Error($"Unexpected error occured while sending StartMonitor message on socket!");
+                Trace.Error(e);
             }
         }
 
-        public async Task EndMonitor()
+        private async Task EndMonitor()
         {
-            Trace.Info("Entering EndMonitor");
-            if (_isMonitorConfigured)
+            try
             {
-                String message = $"End {System.Diagnostics.Process.GetCurrentProcess().Id}";
-                try
+                Trace.Info("Entering EndMonitor");
+                if (_isMonitorConfigured)
                 {
+                    String message = $"End {System.Diagnostics.Process.GetCurrentProcess().Id}";
                     Trace.Info("Writing EndMonitor to socket");
                     _monitorSocket.Send(Encoding.UTF8.GetBytes(message));
                     Trace.Info("Finished EndMonitor writing to socket");
 
-                    await Task.Delay(TimeSpan.FromSeconds(5));
+                    await Task.Delay(TimeSpan.FromSeconds(5));                    
                 }
-                catch (SocketException e)
-                {
-                    Trace.Error($"Failed sending message \"{message}\" on socket!");
-                    Trace.Error(e);
-                }
+            }
+            catch (SocketException e)
+            {
+                Trace.Error($"Failed sending end message on socket!");
+                Trace.Error(e);
+            }
+            catch (Exception e)
+            {
+                Trace.Error($"Unexpected error occured while sending StartMonitor message on socket!");
+                Trace.Error(e);
             }
         }
 
